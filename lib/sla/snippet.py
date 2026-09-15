@@ -5,7 +5,7 @@ import plistlib
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 K = "com.renfei.SnippetsLab.Key."
 UNTITLED = "untitled snippet"
@@ -64,7 +64,7 @@ def write_title(path, new_title, backup_dir=None):
 
 def _backup(path, raw, backup_dir, keep=3):
     backup_dir.mkdir(parents=True, exist_ok=True)
-    name = "%s.%013d.data" % (path.stem, int(time.time() * 1000))
+    name = "%s.%019d.data" % (path.stem, time.time_ns())
     (backup_dir / name).write_bytes(raw)
     olds = sorted(backup_dir.glob(path.stem + ".*.data"))
     for p in olds[:-keep]:

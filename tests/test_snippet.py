@@ -1,6 +1,5 @@
 import plistlib
 import tempfile
-import time
 import unittest
 from pathlib import Path
 
@@ -65,7 +64,6 @@ class WriteTitleTest(unittest.TestCase):
         backup = self.dir / "backup"
         for i in range(5):
             snippet.write_title(self.path, "t%d" % i, backup_dir=backup)
-            time.sleep(0.002)
         files = sorted(backup.glob("BBBB.*.data"))
         self.assertEqual(len(files), 3)
         # 가장 오래 남은 백업은 세 번째 쓰기 직전 상태(t1)여야 한다

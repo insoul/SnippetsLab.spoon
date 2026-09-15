@@ -13,16 +13,22 @@ class State:
         self.snippets = {}
         self.locked = {}
         self.force = []
+        self.pending = []
+        self.load_error = None
 
     @classmethod
     def load(cls, path):
         st = cls(path)
         if st.path.exists():
-            data = json.loads(st.path.read_text("utf-8"))
-            st.last_run = float(data.get("last_run", 0.0))
-            st.snippets = dict(data.get("snippets", {}))
-            st.locked = dict(data.get("locked", {}))
-            st.force = list(data.get("force", []))
+            try:
+                data = json.loads(st.path.read_text("utf-8"))
+                st.last_run = float(data.get("last_run", 0.0))
+                st.snippets = dict(data.get("snippets", {}))
+                st.locked = dict(data.get("locked", {}))
+                st.force = list(data.get("force", []))
+                st.pending = list(data.get("pending", []))
+            except (ValueError, OSError) as e:
+                st.load_error = str(e)
         return st
 
     def save(self):
@@ -32,6 +38,7 @@ class State:
             "snippets": self.snippets,
             "locked": self.locked,
             "force": self.force,
+            "pending": self.pending,
         }
         tmp = self.path.with_name(self.path.name + ".tmp")
         tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), "utf-8")

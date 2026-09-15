@@ -37,9 +37,13 @@ class Log:
 def load_config(path):
     cfg = dict(titler.DEFAULTS)
     path = Path(path)
-    if path.exists():
+    if not path.exists():
+        return cfg, None
+    try:
         cfg.update(json.loads(path.read_text("utf-8")))
-    return cfg
+        return cfg, None
+    except (ValueError, OSError) as e:
+        return dict(titler.DEFAULTS), str(e)
 
 
 def parse(argv):
@@ -70,12 +74,16 @@ def process(path, st, gen, log, backup_dir, dry_run, counts):
     action = decide(st, s.uuid, s.title, s.content_hash, has_content)
     if action == "skip":
         counts["skipped"] += 1
+        if s.uuid in st.pending:
+            st.pending.remove(s.uuid)
         return
     if action == "lock":
         st.snippets.pop(s.uuid, None)
         st.locked[s.uuid] = s.title
         counts["locked"] += 1
         log.write(s.uuid, "lock", s.title)
+        if s.uuid in st.pending:
+            st.pending.remove(s.uuid)
         return
     title = gen("\n\n".join(s.contents))
     counts["generated"] += 1
@@ -87,6 +95,8 @@ def process(path, st, gen, log, backup_dir, dry_run, counts):
     st.locked.pop(s.uuid, None)
     if s.uuid in st.force:
         st.force.remove(s.uuid)
+    if s.uuid in st.pending:
+        st.pending.remove(s.uuid)
     counts["written"] += 1
 
 
@@ -95,6 +105,8 @@ def main(argv=None, generate=None):
     state_dir = Path(args.state_dir)
     st = State.load(state_dir / "state.json")
     log = Log(state_dir / "log")
+    if st.load_error:
+        log.write("-", "error", "state: " + st.load_error)
 
     if args.status:
         show_status(st)
@@ -107,14 +119,16 @@ def main(argv=None, generate=None):
         print("unlocked: %s" % args.unlock)
         return 0
 
-    config = load_config(args.config)
+    config, config_error = load_config(args.config)
+    if config_error:
+        log.write("-", "error", "config: " + config_error)
     gen = generate or (lambda text: titler.generate_title(text, config))
     started = time.time()
     counts = {"generated": 0, "written": 0, "locked": 0, "skipped": 0, "errors": 0}
 
     for path in sorted(Path(args.library).glob("*.data")):
         mtime = path.stat().st_mtime
-        if not args.all and mtime <= st.last_run:
+        if not (args.all or mtime > st.last_run or path.stem in st.pending or path.stem in st.force):
             continue
         if started - mtime < RECENT_SECONDS:
             continue
@@ -123,6 +137,8 @@ def main(argv=None, generate=None):
         except Exception as e:            # 한 파일의 실패가 다른 파일을 막지 않는다
             counts["errors"] += 1
             log.write(path.stem, "error", "%s: %s" % (type(e).__name__, e))
+            if path.stem not in st.pending:
+                st.pending.append(path.stem)
 
     if not args.dry_run:
         # 최근 RECENT_SECONDS 안에 바뀌어 건너뛴 파일이 다음 실행에 잡히도록 그만큼 앞당긴다

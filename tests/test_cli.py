@@ -23,13 +23,18 @@ class CliTest(unittest.TestCase):
         self.lib = base / "Snippets"
         self.lib.mkdir()
         self.state_dir = base / "state"
+        self.config = base / "config.json"
         self.calls = []
 
     def run_cli(self, *extra, generate=None):
         def gen(text):
             self.calls.append(text)
             return "생성된 제목"
-        argv = ["--library", str(self.lib), "--state-dir", str(self.state_dir)] + list(extra)
+        argv = [
+            "--library", str(self.lib),
+            "--state-dir", str(self.state_dir),
+            "--config", str(self.config),
+        ] + list(extra)
         out = StringIO()
         with mock.patch("sys.stdout", out):
             code = cli.main(argv, generate=generate or gen)
@@ -121,9 +126,10 @@ class CliTest(unittest.TestCase):
         old(p)
         st = State.load(self.state_dir / "state.json")
         st.locked["A"] = "내가 쓴 제목"
+        st.last_run = time.time()
         st.save()
         self.run_cli("--unlock", "A")
-        summary = self.run_cli("--all")
+        summary = self.run_cli()
         self.assertEqual(summary["written"], 1)
         st = State.load(self.state_dir / "state.json")
         self.assertEqual(st.force, [])
@@ -135,8 +141,37 @@ class CliTest(unittest.TestCase):
         st.save()
         out = StringIO()
         with mock.patch("sys.stdout", out):
-            cli.main(["--library", str(self.lib), "--state-dir", str(self.state_dir), "--status"])
+            cli.main([
+                "--library", str(self.lib),
+                "--state-dir", str(self.state_dir),
+                "--config", str(self.config),
+                "--status",
+            ])
         self.assertIn("내가 쓴 제목", out.getvalue())
+
+    def test_failed_generation_retries_on_next_plain_run(self):
+        p = self.lib / "A.data"
+        make_snippet(p, "A", "untitled snippet", ["hello"])
+        old(p)
+
+        def boom(text):
+            raise cli.titler.TitleError("down")
+        self.run_cli(generate=boom)
+        summary = self.run_cli()
+        self.assertEqual(summary["written"], 1)
+        self.assertEqual(snippet.load(p).title, "생성된 제목")
+        st = State.load(self.state_dir / "state.json")
+        self.assertEqual(st.pending, [])
+
+    def test_corrupt_state_does_not_crash(self):
+        p = self.lib / "A.data"
+        make_snippet(p, "A", "untitled snippet", ["hello"])
+        old(p)
+        self.state_dir.mkdir(parents=True)
+        (self.state_dir / "state.json").write_text("{not json", "utf-8")
+        summary = self.run_cli()
+        self.assertIsInstance(summary, dict)
+        self.assertIn("error", (self.state_dir / "log").read_text("utf-8"))
 
 
 if __name__ == "__main__":

@@ -12,6 +12,8 @@ class StateFileTest(unittest.TestCase):
         self.assertEqual(st.snippets, {})
         self.assertEqual(st.locked, {})
         self.assertEqual(st.force, [])
+        self.assertEqual(st.pending, [])
+        self.assertIsNone(st.load_error)
 
     def test_round_trip(self):
         path = Path(tempfile.mkdtemp()) / "sub" / "state.json"
@@ -20,12 +22,15 @@ class StateFileTest(unittest.TestCase):
         st.snippets["A"] = {"auto_title": "t", "content_hash": "h"}
         st.locked["B"] = "mine"
         st.force.append("C")
+        st.pending.append("D")
         st.save()
         again = State.load(path)
         self.assertEqual(again.last_run, 12.5)
         self.assertEqual(again.snippets, {"A": {"auto_title": "t", "content_hash": "h"}})
         self.assertEqual(again.locked, {"B": "mine"})
         self.assertEqual(again.force, ["C"])
+        self.assertEqual(again.pending, ["D"])
+        self.assertIsNone(again.load_error)
 
 
 class DecideTest(unittest.TestCase):

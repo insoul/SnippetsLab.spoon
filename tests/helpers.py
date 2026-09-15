@@ -20,10 +20,17 @@ def make_snippet(path, uuid, title, contents, modified=797499964.641164):
     root[K + "SnippetDateModified"] = add({"NS.time": modified})
     parts = {"NS.objects": []}
     root[K + "SnippetParts"] = add(parts)
+    nsdata_class = add({
+        "$classname": "NSMutableData",
+        "$classes": ["NSMutableData", "NSData", "NSObject"],
+    })
     for c in contents:
         part = {}
         part_uid = add(part)
-        part[K + "SnippetPartContent"] = add(c)
+        part[K + "SnippetPartContent"] = add({
+            "NS.data": c.encode("utf-8"),
+            "$class": nsdata_class,
+        })
         part[K + "SnippetPartLanguage"] = add("TextLexer")
         parts["NS.objects"].append(part_uid)
     pl = {

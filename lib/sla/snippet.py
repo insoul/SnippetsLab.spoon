@@ -34,6 +34,18 @@ def _deref(pl, uid):
     return pl["$objects"][uid.data]
 
 
+def _text(pl, uid):
+    val = _deref(pl, uid)
+    if isinstance(val, str):
+        return val
+    if isinstance(val, dict):
+        if "NS.data" in val:
+            return val["NS.data"].decode("utf-8", errors="replace")
+        if "NS.string" in val:
+            return val["NS.string"]
+    return ""
+
+
 def load(path):
     path = Path(path)
     pl = plistlib.loads(path.read_bytes())
@@ -44,7 +56,7 @@ def load(path):
     contents = []
     for part_uid in parts.get("NS.objects", []):
         part = _deref(pl, part_uid) or {}
-        contents.append(_deref(pl, part.get(K + "SnippetPartContent")) or "")
+        contents.append(_text(pl, part.get(K + "SnippetPartContent")))
     return Snippet(path, uuid, title, contents, content_hash(contents))
 
 

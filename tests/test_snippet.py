@@ -27,6 +27,42 @@ class LoadTest(unittest.TestCase):
     def test_hash_depends_on_part_boundaries(self):
         self.assertNotEqual(snippet.content_hash(["ab", "c"]), snippet.content_hash(["a", "bc"]))
 
+    def test_load_accepts_string_and_nsdata_content(self):
+        make_snippet(self.path, "AAAA", "hello", ["one", "two"])
+        nsdata_contents = snippet.load(self.path).contents
+
+        objs = ["$null"]
+
+        def add(o):
+            objs.append(o)
+            return plistlib.UID(len(objs) - 1)
+
+        root = {}
+        root_uid = add(root)
+        root["$class"] = add({"$classname": "SLSnippet", "$classes": ["SLSnippet", "NSObject"]})
+        root[K + "SnippetTitle"] = add("hello")
+        root[K + "SnippetUUID"] = add("STR")
+        root[K + "SnippetDateModified"] = add({"NS.time": 1.0})
+        parts = {"NS.objects": []}
+        root[K + "SnippetParts"] = add(parts)
+        for c in ["one", "two"]:
+            part = {}
+            part_uid = add(part)
+            part[K + "SnippetPartContent"] = add(c)
+            part[K + "SnippetPartLanguage"] = add("TextLexer")
+            parts["NS.objects"].append(part_uid)
+        old_path = self.dir / "STR.data"
+        old_path.write_bytes(plistlib.dumps({
+            "$version": 100000,
+            "$archiver": "NSKeyedArchiver",
+            "$top": {"root": root_uid},
+            "$objects": objs,
+        }, fmt=plistlib.FMT_BINARY))
+
+        string_contents = snippet.load(old_path).contents
+        self.assertEqual(nsdata_contents, string_contents)
+        self.assertEqual(string_contents, ["one", "two"])
+
 
 class WriteTitleTest(unittest.TestCase):
     def setUp(self):

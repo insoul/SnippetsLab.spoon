@@ -1,4 +1,5 @@
 """LM Studio(OpenAI 호환 API)로 제목 한 줄을 받는다."""
+import http.client
 import json
 import re
 import urllib.request
@@ -57,8 +58,8 @@ def generate_title(text, config, opener=urllib.request.urlopen):
     try:
         with opener(req, timeout=config["timeout"]) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-        raw = data["choices"][0]["message"]["content"]
-    except (OSError, ValueError, KeyError, IndexError) as e:
+        raw = data["choices"][0]["message"].get("content") or ""
+    except (OSError, ValueError, KeyError, IndexError, TypeError, http.client.HTTPException) as e:
         raise TitleError("LM Studio 호출 실패: %s" % e)
     title = clean_title(raw, config["max_title_len"])
     if not title:

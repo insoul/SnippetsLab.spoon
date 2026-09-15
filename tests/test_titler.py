@@ -66,6 +66,11 @@ class GenerateTitleTest(unittest.TestCase):
         with self.assertRaises(titler.TitleError):
             titler.generate_title("x", titler.DEFAULTS, opener=opener)
 
+    def test_null_content_raises_title_error(self):
+        opener = fake_opener_returning(None)
+        with self.assertRaises(titler.TitleError):
+            titler.generate_title("x", titler.DEFAULTS, opener=opener)
+
 
 if __name__ == "__main__":
     unittest.main()

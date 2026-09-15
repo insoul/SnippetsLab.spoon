@@ -48,7 +48,7 @@ obj.applyIdleSeconds = 300     -- quit → apply → relaunch only after this mu
 obj.applyCheckSeconds = 60
 obj.logger = hs.logger.new("SLAutoTitle", "info")
 
-local task, rerun, quietTimer, applyTimer, quitWait
+local task, rerun, quietTimer, applyTimer, quitWait, startTimer
 local lastEvent = 0
 local applyPending = false
 local quitting = false        -- we sent kill and are waiting for the app to go away
@@ -132,13 +132,17 @@ local function afterPlan(self, summary)
             armApply(self)
         else
             applyPending = false
+            forceNext = false
             disarm()
         end
     end
     if rerun then rerun = false; self:_plan() end
 end
 
+-- Planning waits while a quit → apply → relaunch sequence is in flight, so the
+-- apply never finds the tool busy with a plan (rerun replays it afterwards).
 function obj:_plan()
+    if task or quitting then rerun = true; return end
     local started = runTool(self, "plan", function(summary) afterPlan(self, summary) end)
     if not started then rerun = true end
 end
@@ -160,6 +164,7 @@ local function applyAndRelaunch(self, relaunch)
     local function finish()
         if relaunch then relaunchApp(self) end
         quitting = false
+        if rerun then rerun = false; self:_plan() end
     end
     if hs.application.get(self.bundleID) then
         -- Someone opened it between our kill and now. Writing would be undone.
@@ -253,7 +258,8 @@ function obj:start()
     self.logger.i("watching " .. self.library)
     -- A plan left in the state file from before a reload has no event to wake
     -- it; run one plan now so a non-empty plan arms the apply timer.
-    hs.timer.doAfter(2, function()
+    startTimer = hs.timer.doAfter(2, function()
+        startTimer = nil
         local ok, e = pcall(function() self:_plan() end)
         if not ok then self.logger.e(tostring(e)) end
     end)
@@ -268,6 +274,7 @@ end
 function obj:stop()
     if self.watcher then self.watcher:stop(); self.watcher = nil end
     if quietTimer then quietTimer:stop(); quietTimer = nil end
+    if startTimer then startTimer:stop(); startTimer = nil end
     disarm()
     if quitWait then quitWait:stop(); quitWait = nil end
     if task then task:terminate(); task = nil end

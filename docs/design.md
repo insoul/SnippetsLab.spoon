@@ -18,7 +18,7 @@ SnippetsLab 에서 제목 없이 저장한 스니펫에 LM Studio 로 만든 제
 - 앱은 저장할 때마다 패키지 전체를 NSFileWrapper 로 다시 쓴다. 캐시와 같은 파일은 하드링크로 넘기고, **캐시와 다른 파일은 캐시의 바이트로 되돌린다**(원본 mtime·birth 까지 복원). 그래서 앱이 실행 중일 때 외부에서 쓴 제목은 앱의 다음 저장 때 사라진다(2026-09-15 17:16 실측, 11개 복귀). 앱을 닫은 상태에서 쓰고 다시 띄우면 앱이 디스크를 읽어 캐시를 만들므로 유지된다(같은 날 17:23 실측, 사용자 편집·재실행 후에도 유지).
 - 앱은 노트를 옮기면 곧바로 그 스니펫 파일을 쓴다. 앱을 떠나는 시점과 무관하다.
 - 단축키로 여는 창은 앱을 활성화하지 않는 패널이다. SnippetsLab 은 frontmost 가 되지 않으므로 "앱을 떠나는 순간" 은 이벤트로 존재하지 않는다.
-- `quit` 후 `open -g -a SnippetsLab` 은 포커스를 뺏지 않고 숨김 상태를 유지한다.
+- `quit` 후 `open -g -b com.renfei.SnippetsLab` 은 포커스를 뺏지 않고 숨김 상태를 유지한다.
 - AX 로 제목 필드에 값을 넣으려면 앱을 활성화하고 Return 을 보내야 한다. 사용자의 포커스 이동을 되돌리므로 쓰지 않는다.
 - 새 스니펫의 기본 제목은 문자열 `untitled snippet` 이다. 제목 필드의 placeholder 도 같은 문자열이다.
 
@@ -96,7 +96,7 @@ LM Studio `POST http://localhost:1234/v1/chat/completions` 을 호출한다.
 
 ### 6. 로그
 
-한 줄에 시각, UUID 앞 8자, 동작(plan / apply / lock / skip-changed / skip-gone / error), 제목. 로그 파일은 1MB 를 넘으면 `.1` 로 돌린다. skip 은 소음을 피하려고 남기지 않는다. relaunch 는 Python 로그가 아니라 Hammerspoon 콘솔(hs.logger)에 남는다.
+한 줄에 시각, UUID 앞 8자, 동작(plan / apply / lock / skip-changed / skip-gone / error), 제목. 로그 파일은 1MB 를 넘으면 `.1` 로 돌린다. 판정 결과가 skip 인 경우는 소음을 피하려고 남기지 않는다(적용 단계의 skip-changed·skip-gone 은 남긴다). relaunch 는 Python 로그가 아니라 Hammerspoon 콘솔(hs.logger)에 남는다.
 
 ## 명령행
 

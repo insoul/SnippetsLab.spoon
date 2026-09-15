@@ -9,6 +9,7 @@ import argparse
 import fcntl
 import json
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -55,9 +56,10 @@ def load_config(path):
 
 def parse(argv):
     ap = argparse.ArgumentParser(prog="snippetslab-autotitle")
-    ap.add_argument("--apply", action="store_true", help="계획된 제목을 파일에 쓴다 (앱이 닫힌 상태에서)")
+    mode = ap.add_mutually_exclusive_group()
+    mode.add_argument("--apply", action="store_true", help="계획된 제목을 파일에 쓴다 (앱이 닫힌 상태에서)")
+    mode.add_argument("--dry-run", action="store_true", help="판정과 생성만 하고 상태를 저장하지 않는다")
     ap.add_argument("--all", action="store_true", help="last_run 을 무시하고 모든 파일을 본다")
-    ap.add_argument("--dry-run", action="store_true", help="판정과 생성만 하고 상태를 저장하지 않는다")
     ap.add_argument("--status", action="store_true", help="상태와 잠금·계획 목록을 보여 준다")
     ap.add_argument("--unlock", metavar="UUID", help="잠금을 풀어 다음 실행에서 다시 생성한다")
     ap.add_argument("--library", default=str(DEFAULT_LIBRARY))
@@ -159,19 +161,32 @@ def run_plan(args, st, log, gen, counts):
         st.last_run = started - RECENT_SECONDS
 
 
+def snippetslab_running():
+    """SnippetsLab 프로세스가 있으면 True. 파일 쓰기는 앱이 닫힌 동안에만 안전하다."""
+    try:
+        return subprocess.run(["/usr/bin/pgrep", "-x", "SnippetsLab"],
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+    except OSError:
+        return True      # 확인할 수 없으면 쓰지 않는 쪽
+
+
 def run_apply(args, st, log, state_dir, counts):
     library = Path(args.library)
     for uuid, plan in sorted(st.planned.items()):
         try:
             apply_one(library / (uuid + ".data"), uuid, plan, st, log, state_dir / "backup", counts)
         except Exception as e:
+            # 계획은 버리고 pending 에 넣어 다음 계획이 다시 판정하게 한다
             counts["errors"] += 1
             log.write(uuid, "error", "%s: %s" % (type(e).__name__, e))
             st.planned.pop(uuid, None)
+            if uuid not in st.pending:
+                st.pending.append(uuid)
 
 
-def main(argv=None, generate=None):
+def main(argv=None, generate=None, app_running=None):
     args = parse(argv)
+    app_running = app_running or snippetslab_running
     state_dir = Path(args.state_dir)
     st = State.load(state_dir / "state.json")
     log = Log(state_dir / "log")
@@ -204,6 +219,13 @@ def main(argv=None, generate=None):
     try:
         counts = {"generated": 0, "written": 0, "locked": 0, "skipped": 0, "errors": 0}
         if args.apply:
+            if app_running():
+                # 실행 중인 앱은 다음 저장 때 파일을 되돌린다. 계획은 그대로 두고 물러난다.
+                log.write("-", "error", "apply refused: SnippetsLab is running")
+                counts["planned"] = len(st.planned)
+                counts["app_running"] = True
+                print(json.dumps(counts, ensure_ascii=False))
+                return 0
             run_apply(args, st, log, state_dir, counts)
         else:
             config, config_error = load_config(args.config)
@@ -215,6 +237,8 @@ def main(argv=None, generate=None):
             try:
                 st.save()
             except Exception as e:
+                # 파일은 이미 바뀌었을 수 있다. 실패로 세어 Lua 가 계획을 내리지 않게 한다.
+                counts["errors"] += 1
                 log.write("-", "error", "state save: %s" % e)
         counts["planned"] = len(st.planned)
         print(json.dumps(counts, ensure_ascii=False))

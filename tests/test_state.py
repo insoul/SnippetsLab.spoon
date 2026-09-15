@@ -13,6 +13,7 @@ class StateFileTest(unittest.TestCase):
         self.assertEqual(st.snippets, {})
         self.assertEqual(st.locked, {})
         self.assertEqual(st.force, [])
+        self.assertEqual(st.planned, {})
         self.assertEqual(st.pending, [])
         self.assertIsNone(st.load_error)
 

@@ -48,9 +48,11 @@ obj.applyIdleSeconds = 300     -- quit → apply → relaunch only after this mu
 obj.applyCheckSeconds = 60
 obj.logger = hs.logger.new("SLAutoTitle", "info")
 
-local task, rerun, quietTimer, applyTimer
+local task, rerun, quietTimer, applyTimer, quitWait
 local lastEvent = 0
 local applyPending = false
+local quitting = false        -- we sent kill and are waiting for the app to go away
+local forceNext = false       -- applyNow() asked to skip the idle/hidden checks once
 
 local function lastLine(s)
     local last
@@ -58,14 +60,21 @@ local function lastLine(s)
     return last
 end
 
+-- nil when the tool failed or printed no parseable summary; callers must not
+-- change any pending state on nil.
 local function summaryOf(self, code, out, err)
     if code ~= 0 then
         self.logger.e("tool exit " .. tostring(code) .. ": " .. (err or ""))
         return nil
     end
     local line = lastLine(out)
-    self.logger.i(line or "no summary")
-    return hs.json.decode(line or "") or {}
+    local summary = line and hs.json.decode(line)
+    if type(summary) ~= "table" then
+        self.logger.e("no summary from tool: " .. tostring(line))
+        return nil
+    end
+    self.logger.i(line)
+    return summary
 end
 
 -- One tool process at a time. `mode` is "plan" or "apply"; `done(summary)` runs
@@ -86,8 +95,22 @@ local function runTool(self, mode, done)
         self.logger.e("cannot spawn " .. tostring(self.tool))
         return false
     end
-    task:start()
+    if not task:start() then
+        self.logger.e("cannot start " .. tostring(self.tool))
+        task = nil
+        return false
+    end
     return true
+end
+
+-- `open -g` keeps focus where it is. hs.application.launchOrFocus would steal it.
+local function relaunchApp(self)
+    local t = hs.task.new("/usr/bin/open", nil, { "-g", "-b", self.bundleID })
+    if t and t:start() then
+        self.logger.i("relaunched SnippetsLab")
+    else
+        self.logger.e("could not relaunch SnippetsLab (open -g -b " .. self.bundleID .. ")")
+    end
 end
 
 local function armApply(self)
@@ -103,9 +126,14 @@ local function disarm()
 end
 
 local function afterPlan(self, summary)
-    if summary and (summary.planned or 0) > 0 then
-        applyPending = true
-        armApply(self)
+    if summary and not summary.busy then
+        if (summary.planned or 0) > 0 then
+            applyPending = true
+            armApply(self)
+        else
+            applyPending = false
+            disarm()
+        end
     end
     if rerun then rerun = false; self:_plan() end
 end
@@ -125,58 +153,80 @@ function obj:_onEvent()
     end)
 end
 
--- Apply the plan, then bring the app back if we quit it. The app is relaunched
--- even when the tool failed: never leave it closed on the person's behalf.
+-- Write the plan while the app is closed, then bring the app back if we quit
+-- it. The relaunch happens no matter what the tool did: never leave the app
+-- closed on the person's behalf.
 local function applyAndRelaunch(self, relaunch)
+    local function finish()
+        if relaunch then relaunchApp(self) end
+        quitting = false
+    end
+    if hs.application.get(self.bundleID) then
+        -- Someone opened it between our kill and now. Writing would be undone.
+        self.logger.w("SnippetsLab is running again; apply postponed")
+        quitting = false
+        return
+    end
     local started = runTool(self, "apply", function(summary)
-        if summary and (summary.planned or 0) == 0 then applyPending = false end
-        if relaunch then
-            -- `open -g` keeps focus where it is. hs.application.launchOrFocus would steal it.
-            local t = hs.task.new("/usr/bin/open", nil, { "-g", "-b", self.bundleID })
-            if t then t:start() end
-            self.logger.i("relaunched")
-        end
+        local ok, e = pcall(function()
+            if summary and not summary.busy and not summary.app_running
+                and (summary.errors or 0) == 0 and (summary.planned or 0) == 0 then
+                applyPending = false
+                disarm()
+            end
+        end)
+        if not ok then self.logger.e(tostring(e)) end
+        finish()
     end)
-    if not started and relaunch then
-        local t = hs.task.new("/usr/bin/open", nil, { "-g", "-b", self.bundleID })
-        if t then t:start() end
-        self.logger.w("apply could not start; relaunched anyway")
+    if not started then
+        self.logger.w("apply could not start")
+        finish()
     end
 end
 
 function obj:_tryApply(force)
+    force = force or forceNext
     if not applyPending then disarm(); return end
-    if task then return end                                   -- a plan is running; next tick
+    if task or quitting then return end                       -- busy; next tick
     if not force and os.time() - lastEvent < self.applyIdleSeconds then return end
     local app = hs.application.get(self.bundleID)
     if not app then
-        -- Not running: nothing to reconcile with, write now.
+        forceNext = false
         self.logger.i("applying (app not running)")
         applyAndRelaunch(self, false)
         return
     end
     if not force and not app:isHidden() and #app:visibleWindows() > 0 then return end
+    forceNext = false
 
-    local pid = app:pid()
+    -- kill() is a graceful terminate: the app saves on the way out, so a title
+    -- typed but not yet on disk lands in the file before --apply re-reads it.
+    quitting = true
     self.logger.i("quitting SnippetsLab to apply")
     app:kill()
     local tries = 0
-    hs.timer.waitUntil(function()
+    quitWait = hs.timer.waitUntil(function()
         local ok, e = pcall(function()
             tries = tries + 1
-            return hs.application.applicationForPID(pid) == nil or tries > 20
+            return hs.application.get(self.bundleID) == nil or tries > 20
         end)
         if not ok then self.logger.e(tostring(e)); return true end
         return e
     end, function()
+        quitWait = nil
         local ok, e = pcall(function()
-            if hs.application.applicationForPID(pid) then
+            if hs.application.get(self.bundleID) then
                 self.logger.w("SnippetsLab did not quit within 10s; will retry")
+                quitting = false
                 return
             end
             applyAndRelaunch(self, true)
         end)
-        if not ok then self.logger.e(tostring(e)) end
+        if not ok then
+            self.logger.e(tostring(e))
+            relaunchApp(self)
+            quitting = false
+        end
     end, 0.5)
 end
 
@@ -201,20 +251,30 @@ function obj:start()
     end)
     self.watcher:start()
     self.logger.i("watching " .. self.library)
+    -- A plan left in the state file from before a reload has no event to wake
+    -- it; run one plan now so a non-empty plan arms the apply timer.
+    hs.timer.doAfter(2, function()
+        local ok, e = pcall(function() self:_plan() end)
+        if not ok then self.logger.e(tostring(e)) end
+    end)
     return self
 end
 
 --- SnippetsLabAutoTitle:stop()
 --- Method
 --- Stop watching and cancel pending timers. A plan left in the state file is
---- applied the next time the Spoon runs.
+--- picked up by the next start(). If the app was quit by this Spoon and not
+--- yet relaunched, it is relaunched here.
 function obj:stop()
     if self.watcher then self.watcher:stop(); self.watcher = nil end
     if quietTimer then quietTimer:stop(); quietTimer = nil end
     disarm()
+    if quitWait then quitWait:stop(); quitWait = nil end
     if task then task:terminate(); task = nil end
+    if quitting then relaunchApp(self); quitting = false end
     rerun = false
     applyPending = false
+    forceNext = false
     return self
 end
 
@@ -233,6 +293,8 @@ end
 --- conditions. For trying it out by hand.
 function obj:applyNow()
     applyPending = true
+    forceNext = true
+    armApply(self)
     local ok, e = pcall(function() self:_tryApply(true) end)
     if not ok then self.logger.e(tostring(e)) end
     return self

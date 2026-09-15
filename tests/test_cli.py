@@ -29,10 +29,12 @@ class CliTest(unittest.TestCase):
         self.config = base / "config.json"
         self.calls = []
 
-    def run_cli(self, *extra, generate=None):
+    def run_cli(self, *extra, generate=None, app_running=None):
         def gen(text):
             self.calls.append(text)
             return "생성된 제목"
+        if app_running is None:
+            app_running = lambda: False
         argv = [
             "--library", str(self.lib),
             "--state-dir", str(self.state_dir),
@@ -40,7 +42,7 @@ class CliTest(unittest.TestCase):
         ] + list(extra)
         out = StringIO()
         with mock.patch("sys.stdout", out):
-            code = cli.main(argv, generate=generate or gen)
+            code = cli.main(argv, generate=generate or gen, app_running=app_running)
         self.assertEqual(code, 0)
         last = out.getvalue().strip().splitlines()[-1]
         try:
@@ -251,6 +253,47 @@ class CliTest(unittest.TestCase):
         self.assertEqual(self.state().planned, {})
         self.assertIn("skip-gone", self.log())
 
+    def test_apply_refuses_while_app_running(self):
+        p = self.lib / "A.data"
+        make_snippet(p, "A", "untitled snippet", ["hello"])
+        old(p)
+        self.run_cli()
+        summary = self.run_cli("--apply", app_running=lambda: True)
+        self.assertTrue(summary["app_running"])
+        self.assertEqual(summary["written"], 0)
+        self.assertEqual(summary["planned"], 1)
+        self.assertEqual(snippet.load(p).title, "untitled snippet")
+        self.assertEqual(len(self.state().planned), 1)
+        self.assertIn("apply refused", self.log())
+
+    def test_apply_and_dry_run_are_exclusive(self):
+        with self.assertRaises(SystemExit):
+            with mock.patch("sys.stderr", StringIO()):
+                cli.main(["--apply", "--dry-run", "--library", str(self.lib), "--state-dir", str(self.state_dir)])
+
+    def test_apply_error_moves_plan_to_pending(self):
+        p = self.lib / "A.data"
+        make_snippet(p, "A", "untitled snippet", ["hello"])
+        old(p)
+        self.run_cli()
+        with mock.patch("sla.cli.snippet.write_title", side_effect=OSError("disk")):
+            summary = self.run_cli("--apply")
+        self.assertEqual(summary["errors"], 1)
+        st = self.state()
+        self.assertEqual(st.planned, {})
+        self.assertEqual(st.pending, ["A"])
+
+    def test_plain_plan_after_apply_skips_own_write(self):
+        p = self.lib / "A.data"
+        make_snippet(p, "A", "untitled snippet", ["hello"])
+        old(p)
+        self.run_cli()
+        self.run_cli("--apply")
+        # 도구 자신의 쓰기로 mtime > last_run 이 된 상태. --all 없이도 skip 이어야 한다.
+        summary = self.run_cli()
+        self.assertEqual(summary["generated"], 0)
+        self.assertEqual(summary["planned"], 0)
+
     def test_apply_with_nothing_planned_is_noop(self):
         summary = self.run_cli("--apply")
         self.assertEqual(summary, {"generated": 0, "written": 0, "locked": 0, "skipped": 0, "errors": 0, "planned": 0})
@@ -314,6 +357,7 @@ class CliTest(unittest.TestCase):
         with mock.patch("sla.cli.State.save", side_effect=OSError("disk")):
             summary = self.run_cli()
         self.assertEqual(summary["generated"], 1)
+        self.assertEqual(summary["errors"], 1)
         self.assertIn("state save:", self.log())
 
 

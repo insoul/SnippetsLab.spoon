@@ -54,6 +54,7 @@ class GenerateTitleTest(unittest.TestCase):
         body = json.loads(req.data.decode("utf-8"))
         self.assertEqual(body["model"], cfg["model"])
         self.assertEqual(body["messages"][1]["content"], "01234")
+        self.assertEqual(body["reasoning_effort"], "none")
 
     def test_empty_title_raises(self):
         opener = fake_opener_returning("<think>hmm")

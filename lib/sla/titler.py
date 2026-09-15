@@ -48,6 +48,8 @@ def generate_title(text, config, opener=urllib.request.urlopen):
         "temperature": 0.2,
         "max_tokens": 400,
         "stream": False,
+        # qwen3.6 기본 thinking 은 max_tokens 를 다 써서 content 가 빈다
+        "reasoning_effort": "none",
     }
     req = urllib.request.Request(
         config["base_url"] + "/chat/completions",

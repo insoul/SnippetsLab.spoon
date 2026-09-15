@@ -4,7 +4,7 @@ SnippetsLab 에서 제목 없이 저장한 스니펫에 LM Studio 로 만든 제
 
 - 도구가 넣은 제목은 본문이 바뀌면 다시 만든다.
 - 사용자가 직접 쓴 제목은 바꾸지 않는다.
-- 포커스·선택·창 상태를 건드리지 않는다. 앱이 숨겨져 있거나 보이는 창이 없고, 5분간 조용할 때만 백그라운드로 재실행한다.
+- 포커스·선택·창 상태를 건드리지 않는다. 제목은 30초 조용할 때 미리 만들어 두고(계획), 앱이 숨겨져 있거나 보이는 창이 없고 5분간 조용할 때 앱을 잠깐 닫고 써 넣은 뒤(적용, 1초 안팎) 백그라운드로 다시 띄운다. SnippetsLab 은 저장할 때마다 자기 캐시로 파일을 되돌리므로 파일은 앱이 닫힌 동안에만 쓴다.
 
 왜 이런 모양인지는 `docs/design.md` 에 있다.
 
@@ -44,10 +44,11 @@ LM Studio 가 `localhost:1234` 에서 서버 모드로 떠 있어야 한다.
 ## 명령행
 
 ```
-snippetslab-autotitle            # 바뀐 파일을 처리 (Spoon 이 부르는 기본 동작)
+snippetslab-autotitle            # 계획: 바뀐 파일의 제목을 만들어 쌓아 둔다 (파일 쓰기 없음)
+snippetslab-autotitle --apply    # 적용: 쌓인 제목을 파일에 쓴다 — 앱을 닫은 뒤에만
 snippetslab-autotitle --all      # 모든 파일을 본다 (처음 적용할 때)
-snippetslab-autotitle --dry-run  # 쓰지 않고 판정·생성만
-snippetslab-autotitle --status   # 상태와 잠금 목록
+snippetslab-autotitle --dry-run  # 상태를 저장하지 않고 판정·생성만
+snippetslab-autotitle --status   # 상태와 잠금·계획 목록
 snippetslab-autotitle --unlock <UUID>   # 잠금을 풀고 다음 실행에서 다시 생성
 ```
 

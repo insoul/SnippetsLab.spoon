@@ -14,6 +14,7 @@ class State:
         self.locked = {}
         self.force = []
         self.pending = []
+        self.planned = {}
         self.load_error = None
 
     @classmethod
@@ -27,6 +28,7 @@ class State:
                 st.locked = dict(data.get("locked", {}))
                 st.force = list(data.get("force", []))
                 st.pending = list(data.get("pending", []))
+                st.planned = dict(data.get("planned", {}))
             except (ValueError, OSError) as e:
                 st.load_error = str(e)
         return st
@@ -39,6 +41,7 @@ class State:
             "locked": self.locked,
             "force": self.force,
             "pending": self.pending,
+            "planned": self.planned,
         }
         tmp = self.path.with_name(".%s.%d.tmp" % (self.path.name, os.getpid()))
         tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), "utf-8")

@@ -24,6 +24,7 @@ class StateFileTest(unittest.TestCase):
         st.locked["B"] = "mine"
         st.force.append("C")
         st.pending.append("D")
+        st.planned["E"] = {"title": "t", "seen_title": "untitled snippet", "content_hash": "h"}
         st.save()
         again = State.load(path)
         self.assertEqual(again.last_run, 12.5)
@@ -31,6 +32,7 @@ class StateFileTest(unittest.TestCase):
         self.assertEqual(again.locked, {"B": "mine"})
         self.assertEqual(again.force, ["C"])
         self.assertEqual(again.pending, ["D"])
+        self.assertEqual(again.planned, {"E": {"title": "t", "seen_title": "untitled snippet", "content_hash": "h"}})
         self.assertIsNone(again.load_error)
 
 

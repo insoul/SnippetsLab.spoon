@@ -48,67 +48,129 @@ class CliTest(unittest.TestCase):
         except json.JSONDecodeError:
             return last
 
-    def test_untitled_snippet_gets_title_and_record(self):
+    def state(self):
+        return State.load(self.state_dir / "state.json")
+
+    def log(self):
+        return (self.state_dir / "log").read_text("utf-8")
+
+    # --- 계획 단계 ---
+
+    def test_plan_generates_but_does_not_write(self):
         p = self.lib / "A.data"
         make_snippet(p, "A", "untitled snippet", ["hello", "world"])
         old(p)
         summary = self.run_cli()
-        self.assertEqual(summary["written"], 1)
-        self.assertEqual(snippet.load(p).title, "생성된 제목")
+        self.assertEqual(summary["generated"], 1)
+        self.assertEqual(summary["written"], 0)
+        self.assertEqual(summary["planned"], 1)
+        self.assertEqual(snippet.load(p).title, "untitled snippet")
         self.assertEqual(self.calls, ["hello\n\nworld"])
-        st = State.load(self.state_dir / "state.json")
-        self.assertEqual(st.snippets["A"]["auto_title"], "생성된 제목")
-        self.assertTrue((self.state_dir / "backup").exists())
-        self.assertIn("generate", (self.state_dir / "log").read_text("utf-8"))
+        plan = self.state().planned["A"]
+        self.assertEqual(plan["title"], "생성된 제목")
+        self.assertEqual(plan["seen_title"], "untitled snippet")
+        self.assertIn("plan", self.log())
 
-    def test_second_run_skips_own_write(self):
+    def test_apply_writes_planned_and_records(self):
         p = self.lib / "A.data"
         make_snippet(p, "A", "untitled snippet", ["hello"])
         old(p)
         self.run_cli()
+        summary = self.run_cli("--apply")
+        self.assertEqual(summary["written"], 1)
+        self.assertEqual(summary["planned"], 0)
+        self.assertEqual(snippet.load(p).title, "생성된 제목")
+        st = self.state()
+        self.assertEqual(st.snippets["A"]["auto_title"], "생성된 제목")
+        self.assertEqual(st.planned, {})
+        self.assertTrue((self.state_dir / "backup").exists())
+        self.assertIn("apply", self.log())
+
+    def test_apply_does_not_call_generator(self):
+        p = self.lib / "A.data"
+        make_snippet(p, "A", "untitled snippet", ["hello"])
+        old(p)
+        self.run_cli()
+        self.calls.clear()
+        self.run_cli("--apply")
+        self.assertEqual(self.calls, [])
+
+    def test_replan_updates_existing_plan(self):
+        p = self.lib / "A.data"
+        make_snippet(p, "A", "untitled snippet", ["hello"])
+        old(p)
+        self.run_cli()
+        make_snippet(p, "A", "untitled snippet", ["hello more"])
+        old(p)
+        summary = self.run_cli("--all", generate=lambda t: "새 계획")
+        self.assertEqual(summary["planned"], 1)
+        self.assertEqual(self.state().planned["A"]["title"], "새 계획")
+
+    def test_second_plan_skips_own_write(self):
+        p = self.lib / "A.data"
+        make_snippet(p, "A", "untitled snippet", ["hello"])
+        old(p)
+        self.run_cli()
+        self.run_cli("--apply")
         old(p)
         summary = self.run_cli("--all")
-        self.assertEqual(summary["written"], 0)
+        self.assertEqual(summary["generated"], 0)
         self.assertEqual(summary["skipped"], 1)
+        self.assertEqual(summary["planned"], 0)
 
     def test_user_title_locks_and_never_changes(self):
         p = self.lib / "A.data"
         make_snippet(p, "A", "untitled snippet", ["hello"])
         old(p)
         self.run_cli()
+        self.run_cli("--apply")
         make_snippet(p, "A", "내가 쓴 제목", ["hello changed"])
         old(p)
         summary = self.run_cli("--all")
         self.assertEqual(summary["locked"], 1)
         self.assertEqual(snippet.load(p).title, "내가 쓴 제목")
-        st = State.load(self.state_dir / "state.json")
+        st = self.state()
         self.assertNotIn("A", st.snippets)
         self.assertEqual(st.locked["A"], "내가 쓴 제목")
+        self.assertEqual(st.planned, {})
+
+    def test_lock_drops_existing_plan(self):
+        p = self.lib / "A.data"
+        make_snippet(p, "A", "untitled snippet", ["hello"])
+        old(p)
+        self.run_cli()
+        st = self.state()
+        st.snippets["A"] = {"auto_title": "옛 자동 제목", "content_hash": "x"}
+        st.save()
+        make_snippet(p, "A", "내가 쓴 제목", ["hello"])
+        old(p)
+        self.run_cli("--all")
+        self.assertEqual(self.state().planned, {})
 
     def test_recent_files_are_left_alone(self):
         p = self.lib / "A.data"
         make_snippet(p, "A", "untitled snippet", ["hello"])   # mtime = now
         summary = self.run_cli()
-        self.assertEqual(summary["written"], 0)
-        self.assertEqual(snippet.load(p).title, "untitled snippet")
+        self.assertEqual(summary["generated"], 0)
+        self.assertEqual(summary["planned"], 0)
 
     def test_only_files_changed_since_last_run(self):
         p = self.lib / "A.data"
         make_snippet(p, "A", "untitled snippet", ["hello"])
         old(p, 600)
-        st = State.load(self.state_dir / "state.json")
+        st = self.state()
         st.last_run = time.time() - 300
         st.save()
-        self.assertEqual(self.run_cli()["written"], 0)
-        self.assertEqual(self.run_cli("--all")["written"], 1)
+        self.assertEqual(self.run_cli()["generated"], 0)
+        self.assertEqual(self.run_cli("--all")["generated"], 1)
 
-    def test_dry_run_writes_nothing(self):
+    def test_dry_run_saves_nothing(self):
         p = self.lib / "A.data"
         make_snippet(p, "A", "untitled snippet", ["hello"])
         old(p)
         summary = self.run_cli("--dry-run")
         self.assertEqual(summary["generated"], 1)
-        self.assertEqual(summary["written"], 0)
+        self.assertEqual(summary["planned"], 0)
         self.assertEqual(snippet.load(p).title, "untitled snippet")
         self.assertFalse((self.state_dir / "state.json").exists())
 
@@ -121,36 +183,8 @@ class CliTest(unittest.TestCase):
             raise cli.titler.TitleError("down")
         summary = self.run_cli(generate=boom)
         self.assertEqual(summary["errors"], 1)
-        self.assertEqual(snippet.load(p).title, "untitled snippet")
-
-    def test_unlock_then_regenerates_over_user_title(self):
-        p = self.lib / "A.data"
-        make_snippet(p, "A", "내가 쓴 제목", ["hello"])
-        old(p)
-        st = State.load(self.state_dir / "state.json")
-        st.locked["A"] = "내가 쓴 제목"
-        st.last_run = time.time()
-        st.save()
-        self.run_cli("--unlock", "A")
-        summary = self.run_cli()
-        self.assertEqual(summary["written"], 1)
-        st = State.load(self.state_dir / "state.json")
-        self.assertEqual(st.force, [])
-        self.assertNotIn("A", st.locked)
-
-    def test_status_prints_locked(self):
-        st = State.load(self.state_dir / "state.json")
-        st.locked["A"] = "내가 쓴 제목"
-        st.save()
-        out = StringIO()
-        with mock.patch("sys.stdout", out):
-            cli.main([
-                "--library", str(self.lib),
-                "--state-dir", str(self.state_dir),
-                "--config", str(self.config),
-                "--status",
-            ])
-        self.assertIn("내가 쓴 제목", out.getvalue())
+        self.assertEqual(summary["planned"], 0)
+        self.assertEqual(self.state().pending, ["A"])
 
     def test_failed_generation_retries_on_next_plain_run(self):
         p = self.lib / "A.data"
@@ -161,10 +195,86 @@ class CliTest(unittest.TestCase):
             raise cli.titler.TitleError("down")
         self.run_cli(generate=boom)
         summary = self.run_cli()
-        self.assertEqual(summary["written"], 1)
+        self.assertEqual(summary["planned"], 1)
+        self.assertEqual(self.state().pending, [])
+
+    def test_unlock_then_replans_over_user_title(self):
+        p = self.lib / "A.data"
+        make_snippet(p, "A", "내가 쓴 제목", ["hello"])
+        old(p)
+        st = self.state()
+        st.locked["A"] = "내가 쓴 제목"
+        st.last_run = time.time()
+        st.save()
+        self.run_cli("--unlock", "A")
+        summary = self.run_cli()
+        self.assertEqual(summary["planned"], 1)
+        self.run_cli("--apply")
         self.assertEqual(snippet.load(p).title, "생성된 제목")
-        st = State.load(self.state_dir / "state.json")
-        self.assertEqual(st.pending, [])
+        st = self.state()
+        self.assertEqual(st.force, [])
+        self.assertNotIn("A", st.locked)
+
+    # --- 적용 단계의 안전장치 ---
+
+    def test_apply_skips_file_changed_after_plan(self):
+        p = self.lib / "A.data"
+        make_snippet(p, "A", "untitled snippet", ["hello"])
+        old(p)
+        self.run_cli()
+        make_snippet(p, "A", "내가 쓴 제목", ["hello"])
+        summary = self.run_cli("--apply")
+        self.assertEqual(summary["written"], 0)
+        self.assertEqual(summary["skipped"], 1)
+        self.assertEqual(snippet.load(p).title, "내가 쓴 제목")
+        self.assertEqual(self.state().planned, {})
+        self.assertIn("skip-changed", self.log())
+
+    def test_apply_skips_content_changed_after_plan(self):
+        p = self.lib / "A.data"
+        make_snippet(p, "A", "untitled snippet", ["hello"])
+        old(p)
+        self.run_cli()
+        make_snippet(p, "A", "untitled snippet", ["hello edited"])
+        summary = self.run_cli("--apply")
+        self.assertEqual(summary["written"], 0)
+        self.assertEqual(snippet.load(p).title, "untitled snippet")
+
+    def test_apply_drops_plan_for_deleted_file(self):
+        p = self.lib / "A.data"
+        make_snippet(p, "A", "untitled snippet", ["hello"])
+        old(p)
+        self.run_cli()
+        p.unlink()
+        summary = self.run_cli("--apply")
+        self.assertEqual(summary["written"], 0)
+        self.assertEqual(self.state().planned, {})
+        self.assertIn("skip-gone", self.log())
+
+    def test_apply_with_nothing_planned_is_noop(self):
+        summary = self.run_cli("--apply")
+        self.assertEqual(summary, {"generated": 0, "written": 0, "locked": 0, "skipped": 0, "errors": 0, "planned": 0})
+
+    # --- 상태·잠금·로그 ---
+
+    def test_status_prints_locked_and_planned(self):
+        st = self.state()
+        st.locked["A"] = "내가 쓴 제목"
+        st.planned["B"] = {"title": "계획된 제목", "seen_title": "untitled snippet", "content_hash": "h"}
+        st.pending.append("C")
+        st.save()
+        out = StringIO()
+        with mock.patch("sys.stdout", out):
+            cli.main([
+                "--library", str(self.lib),
+                "--state-dir", str(self.state_dir),
+                "--config", str(self.config),
+                "--status",
+            ])
+        self.assertIn("내가 쓴 제목", out.getvalue())
+        self.assertIn("planned: 1", out.getvalue())
+        self.assertIn("계획된 제목", out.getvalue())
+        self.assertIn("pending: C", out.getvalue())
 
     def test_corrupt_state_does_not_crash(self):
         p = self.lib / "A.data"
@@ -174,22 +284,7 @@ class CliTest(unittest.TestCase):
         (self.state_dir / "state.json").write_text("{not json", "utf-8")
         summary = self.run_cli()
         self.assertIsInstance(summary, dict)
-        self.assertIn("error", (self.state_dir / "log").read_text("utf-8"))
-
-    def test_file_changed_during_generate_is_not_written(self):
-        p = self.lib / "A.data"
-        make_snippet(p, "A", "untitled snippet", ["hello"])
-        old(p)
-
-        def gen_and_rewrite(text):
-            make_snippet(p, "A", "내가 쓴 제목", ["hello"])
-            return "X"
-
-        summary = self.run_cli(generate=gen_and_rewrite)
-        self.assertEqual(summary["written"], 0)
-        self.assertEqual(summary["skipped"], 1)
-        self.assertEqual(snippet.load(p).title, "내가 쓴 제목")
-        self.assertIn("skip-changed", (self.state_dir / "log").read_text("utf-8"))
+        self.assertIn("error", self.log())
 
     def test_busy_when_lock_held(self):
         p = self.lib / "A.data"
@@ -201,29 +296,15 @@ class CliTest(unittest.TestCase):
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         summary = self.run_cli()
         self.assertTrue(summary["busy"])
-        self.assertEqual(summary["written"], 0)
-        self.assertEqual(snippet.load(p).title, "untitled snippet")
-
-    def test_status_prints_pending(self):
-        st = State.load(self.state_dir / "state.json")
-        st.pending.append("AAA")
-        st.pending.append("BBB")
-        st.save()
-        out = StringIO()
-        with mock.patch("sys.stdout", out):
-            cli.main([
-                "--library", str(self.lib),
-                "--state-dir", str(self.state_dir),
-                "--config", str(self.config),
-                "--status",
-            ])
-        self.assertIn("pending: AAA, BBB", out.getvalue())
+        self.assertEqual(summary["generated"], 0)
+        summary = self.run_cli("--apply")
+        self.assertTrue(summary["busy"])
 
     def test_log_rotates_when_over_limit(self):
         with mock.patch("sla.cli.LOG_ROTATE_BYTES", 10):
             log = cli.Log(self.state_dir / "log")
-            log.write("AAAAAAAA", "generate", "one")
-            log.write("BBBBBBBB", "generate", "two")
+            log.write("AAAAAAAA", "plan", "one")
+            log.write("BBBBBBBB", "plan", "two")
         self.assertTrue((self.state_dir / "log.1").exists())
 
     def test_state_save_error_still_prints_summary(self):
@@ -232,8 +313,8 @@ class CliTest(unittest.TestCase):
         old(p)
         with mock.patch("sla.cli.State.save", side_effect=OSError("disk")):
             summary = self.run_cli()
-        self.assertEqual(summary["written"], 1)
-        self.assertIn("state save:", (self.state_dir / "log").read_text("utf-8"))
+        self.assertEqual(summary["generated"], 1)
+        self.assertIn("state save:", self.log())
 
 
 if __name__ == "__main__":

@@ -1,0 +1,11 @@
+#!/usr/bin/env python3
+"""snippetslab-autotitle 진입점. 자기 옆의 lib/ 를 경로에 넣고 cli.main 을 부른다."""
+import os
+import sys
+
+HERE = os.path.dirname(os.path.realpath(__file__))
+sys.path.insert(0, os.path.join(HERE, "..", "lib"))
+
+from sla.cli import main  # noqa: E402
+
+sys.exit(main())

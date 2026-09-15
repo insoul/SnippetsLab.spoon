@@ -39,7 +39,7 @@ def _text(pl, uid):
     if isinstance(val, str):
         return val
     if isinstance(val, dict):
-        if "NS.data" in val:
+        if "NS.data" in val and isinstance(val["NS.data"], (bytes, bytearray)):
             return val["NS.data"].decode("utf-8", errors="replace")
         if "NS.string" in val:
             return val["NS.string"]

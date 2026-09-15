@@ -63,6 +63,16 @@ class LoadTest(unittest.TestCase):
         self.assertEqual(nsdata_contents, string_contents)
         self.assertEqual(string_contents, ["one", "two"])
 
+    def test_nsdata_non_bytes_returns_empty_without_raising(self):
+        make_snippet(self.path, "AAAA", "hello", ["one"])
+        pl = plistlib.loads(self.path.read_bytes())
+        for o in pl["$objects"]:
+            if isinstance(o, dict) and "NS.data" in o:
+                o["NS.data"] = 1
+        self.path.write_bytes(plistlib.dumps(pl, fmt=plistlib.FMT_BINARY))
+        s = snippet.load(self.path)
+        self.assertEqual(s.contents, [""])
+
 
 class WriteTitleTest(unittest.TestCase):
     def setUp(self):

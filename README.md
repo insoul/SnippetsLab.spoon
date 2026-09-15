@@ -23,6 +23,10 @@ hs.loadSpoon("SnippetsLabAutoTitle"):start()
 
 LM Studio 가 `localhost:1234` 에서 서버 모드로 떠 있어야 한다.
 
+### 처음 실행할 때
+
+라이브러리는 iCloud Drive(`~/Library/Mobile Documents/…`) 안에 있으므로, Spoon을 처음 시작하면 macOS가 "Hammerspoon wants to access files managed by iCloud Drive" 대화상자를 띄운다. Allow를 누를 때까지 Hammerspoon이 막혀 AppleScript와 콘솔이 응답하지 않는다. 이 질문은 한 번만 나오므로 Allow를 누르면 된다. Don't Allow를 눌렀다면 시스템 설정 → 개인정보 보호 및 보안 → 파일 및 폴더 → Hammerspoon에서 다시 켠다.
+
 ## 설정
 
 `~/.config/snippetslab-autotitle/config.json` (없으면 기본값):

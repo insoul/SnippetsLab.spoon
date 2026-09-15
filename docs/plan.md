@@ -48,7 +48,7 @@ SnippetsLabAutoTitle.spoon/
 테스트 실행 명령(모든 태스크 공통):
 
 ```bash
-cd ~/.hammerspoon/Spoons/SnippetsLabAutoTitle.spoon && PYTHONPATH=lib /usr/bin/python3 -m unittest discover -s tests -v
+cd ~/.hammerspoon/Spoons/SnippetsLabAutoTitle.spoon && PYTHONPATH=lib:tests /usr/bin/python3 -m unittest discover -s tests -v
 ```
 
 ---

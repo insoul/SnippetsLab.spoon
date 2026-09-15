@@ -4,7 +4,7 @@ from pathlib import Path
 K = "com.renfei.SnippetsLab.Key."
 
 
-def make_snippet(path, uuid, title, contents, modified=797499964.641164):
+def make_snippet(path, uuid, title, contents, modified=797499964.641164, title_as_nsstring=False):
     """SnippetsLab 형식의 NSKeyedArchiver plist 를 만든다. title=None 이면 $null."""
     objs = ["$null"]
 
@@ -15,7 +15,19 @@ def make_snippet(path, uuid, title, contents, modified=797499964.641164):
     root = {}
     root_uid = add(root)
     root["$class"] = add({"$classname": "SLSnippet", "$classes": ["SLSnippet", "NSObject"]})
-    root[K + "SnippetTitle"] = plistlib.UID(0) if title is None else add(title)
+    if title is None:
+        root[K + "SnippetTitle"] = plistlib.UID(0)
+    elif title_as_nsstring:
+        nsstring_class = add({
+            "$classname": "NSMutableString",
+            "$classes": ["NSMutableString", "NSString", "NSObject"],
+        })
+        root[K + "SnippetTitle"] = add({
+            "NS.string": title,
+            "$class": nsstring_class,
+        })
+    else:
+        root[K + "SnippetTitle"] = add(title)
     root[K + "SnippetUUID"] = add(uuid)
     root[K + "SnippetDateModified"] = add({"NS.time": modified})
     parts = {"NS.objects": []}

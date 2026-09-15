@@ -1,3 +1,4 @@
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -35,7 +36,9 @@ class StateFileTest(unittest.TestCase):
 
 class DecideTest(unittest.TestCase):
     def setUp(self):
-        self.st = State.load(Path(tempfile.mkdtemp()) / "state.json")
+        d = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        self.st = State.load(d / "state.json")
         self.st.snippets["A"] = {"auto_title": "auto", "content_hash": "h1"}
 
     def test_untitled_generates(self):

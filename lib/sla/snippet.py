@@ -50,7 +50,7 @@ def load(path):
     path = Path(path)
     pl = plistlib.loads(path.read_bytes())
     root = _root(pl)
-    title = _deref(pl, root.get(K + "SnippetTitle")) or ""
+    title = _text(pl, root.get(K + "SnippetTitle"))
     uuid = _deref(pl, root.get(K + "SnippetUUID")) or path.stem
     parts = _deref(pl, root.get(K + "SnippetParts")) or {}
     contents = []
@@ -69,7 +69,7 @@ def write_title(path, new_title, backup_dir=None):
     root[K + "SnippetTitle"] = plistlib.UID(len(pl["$objects"]) - 1)
     if backup_dir is not None:
         _backup(path, raw, Path(backup_dir))
-    tmp = path.with_name("." + path.name + ".tmp")
+    tmp = path.with_name(".%s.%d.tmp" % (path.name, os.getpid()))
     tmp.write_bytes(plistlib.dumps(pl, fmt=plistlib.FMT_BINARY))
     os.replace(tmp, path)
 

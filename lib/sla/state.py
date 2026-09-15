@@ -40,7 +40,7 @@ class State:
             "force": self.force,
             "pending": self.pending,
         }
-        tmp = self.path.with_name(self.path.name + ".tmp")
+        tmp = self.path.with_name(".%s.%d.tmp" % (self.path.name, os.getpid()))
         tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), "utf-8")
         os.replace(tmp, self.path)
 

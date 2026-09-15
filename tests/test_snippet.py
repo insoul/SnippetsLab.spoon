@@ -1,4 +1,5 @@
 import plistlib
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,6 +11,7 @@ from sla import snippet
 class LoadTest(unittest.TestCase):
     def setUp(self):
         self.dir = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.dir, ignore_errors=True)
         self.path = self.dir / "AAAA.data"
 
     def test_reads_title_uuid_and_contents(self):
@@ -63,6 +65,12 @@ class LoadTest(unittest.TestCase):
         self.assertEqual(nsdata_contents, string_contents)
         self.assertEqual(string_contents, ["one", "two"])
 
+    def test_nsmutable_string_title_reads_as_text(self):
+        make_snippet(self.path, "AAAA", "untitled snippet", ["x"], title_as_nsstring=True)
+        s = snippet.load(self.path)
+        self.assertEqual(s.title, "untitled snippet")
+        self.assertIsInstance(s.title, str)
+
     def test_nsdata_non_bytes_returns_empty_without_raising(self):
         make_snippet(self.path, "AAAA", "hello", ["one"])
         pl = plistlib.loads(self.path.read_bytes())
@@ -77,6 +85,7 @@ class LoadTest(unittest.TestCase):
 class WriteTitleTest(unittest.TestCase):
     def setUp(self):
         self.dir = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.dir, ignore_errors=True)
         self.path = self.dir / "BBBB.data"
         make_snippet(self.path, "BBBB", "untitled snippet", ["body"])
 

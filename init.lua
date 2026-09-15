@@ -51,6 +51,7 @@ local function lastLine(s)
     return last
 end
 
+local safeRun
 local function runTool(self)
     if task then rerun = true; return end
     task = hs.task.new(self.tool, function(code, out, err)
@@ -68,17 +69,19 @@ local function runTool(self)
             end
         end)
         if not ok then self.logger.e(tostring(e)) end
-        if rerun then rerun = false; runTool(self) end
+        if rerun then rerun = false; safeRun(self) end
     end, { "--library", self.library })
     if task then task:start() end
 end
+
+safeRun = function(self) local ok, e = pcall(runTool, self); if not ok then self.logger.e(tostring(e)) end end
 
 function obj:_onEvent()
     lastEvent = os.time()
     if quietTimer then quietTimer:stop() end
     quietTimer = hs.timer.doAfter(self.quietSeconds, function()
         quietTimer = nil
-        runTool(self)
+        safeRun(self)
     end)
 end
 
@@ -111,19 +114,26 @@ function obj:_tryRelaunch()
     app:kill()
     local tries = 0
     hs.timer.waitUntil(function()
-        tries = tries + 1
-        return hs.application.applicationForPID(pid) == nil or tries > 20
+        local ok, e = pcall(function()
+            tries = tries + 1
+            return hs.application.applicationForPID(pid) == nil or tries > 20
+        end)
+        if not ok then self.logger.e(tostring(e)); return true end
+        return e
     end, function()
-        if hs.application.applicationForPID(pid) then
-            self.logger.w("SnippetsLab did not quit within 10s; not relaunching")
-            relaunchPending = true
-            self:_armRelaunch()
-            return
-        end
-        -- `open -g` keeps focus where it is. hs.application.launchOrFocus would steal it.
-        local t = hs.task.new("/usr/bin/open", nil, { "-g", "-b", self.bundleID })
-        if t then t:start() end
-        self.logger.i("relaunched")
+        local ok, e = pcall(function()
+            if hs.application.applicationForPID(pid) then
+                self.logger.w("SnippetsLab did not quit within 10s; not relaunching")
+                relaunchPending = true
+                self:_armRelaunch()
+                return
+            end
+            -- `open -g` keeps focus where it is. hs.application.launchOrFocus would steal it.
+            local t = hs.task.new("/usr/bin/open", nil, { "-g", "-b", self.bundleID })
+            if t then t:start() end
+            self.logger.i("relaunched")
+        end)
+        if not ok then self.logger.e(tostring(e)) end
     end, 0.5)
 end
 
@@ -158,6 +168,9 @@ function obj:stop()
     if self.watcher then self.watcher:stop(); self.watcher = nil end
     if quietTimer then quietTimer:stop(); quietTimer = nil end
     disarm()
+    if task then task:terminate(); task = nil end
+    rerun = false
+    relaunchPending = false
     return self
 end
 
@@ -165,7 +178,7 @@ end
 --- Method
 --- Run the tool immediately, without waiting for the quiet period.
 function obj:runNow()
-    runTool(self)
+    safeRun(self)
     return self
 end
 

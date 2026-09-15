@@ -1,5 +1,7 @@
+import fcntl
 import json
 import os
+import shutil
 import tempfile
 import time
 import unittest
@@ -20,6 +22,7 @@ def old(path, seconds=60):
 class CliTest(unittest.TestCase):
     def setUp(self):
         base = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, base, ignore_errors=True)
         self.lib = base / "Snippets"
         self.lib.mkdir()
         self.state_dir = base / "state"
@@ -172,6 +175,65 @@ class CliTest(unittest.TestCase):
         summary = self.run_cli()
         self.assertIsInstance(summary, dict)
         self.assertIn("error", (self.state_dir / "log").read_text("utf-8"))
+
+    def test_file_changed_during_generate_is_not_written(self):
+        p = self.lib / "A.data"
+        make_snippet(p, "A", "untitled snippet", ["hello"])
+        old(p)
+
+        def gen_and_rewrite(text):
+            make_snippet(p, "A", "내가 쓴 제목", ["hello"])
+            return "X"
+
+        summary = self.run_cli(generate=gen_and_rewrite)
+        self.assertEqual(summary["written"], 0)
+        self.assertEqual(summary["skipped"], 1)
+        self.assertEqual(snippet.load(p).title, "내가 쓴 제목")
+        self.assertIn("skip-changed", (self.state_dir / "log").read_text("utf-8"))
+
+    def test_busy_when_lock_held(self):
+        p = self.lib / "A.data"
+        make_snippet(p, "A", "untitled snippet", ["hello"])
+        old(p)
+        self.state_dir.mkdir(parents=True)
+        fd = os.open(str(self.state_dir / "lock"), os.O_CREAT | os.O_RDWR)
+        self.addCleanup(os.close, fd)
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        summary = self.run_cli()
+        self.assertTrue(summary["busy"])
+        self.assertEqual(summary["written"], 0)
+        self.assertEqual(snippet.load(p).title, "untitled snippet")
+
+    def test_status_prints_pending(self):
+        st = State.load(self.state_dir / "state.json")
+        st.pending.append("AAA")
+        st.pending.append("BBB")
+        st.save()
+        out = StringIO()
+        with mock.patch("sys.stdout", out):
+            cli.main([
+                "--library", str(self.lib),
+                "--state-dir", str(self.state_dir),
+                "--config", str(self.config),
+                "--status",
+            ])
+        self.assertIn("pending: AAA, BBB", out.getvalue())
+
+    def test_log_rotates_when_over_limit(self):
+        with mock.patch("sla.cli.LOG_ROTATE_BYTES", 10):
+            log = cli.Log(self.state_dir / "log")
+            log.write("AAAAAAAA", "generate", "one")
+            log.write("BBBBBBBB", "generate", "two")
+        self.assertTrue((self.state_dir / "log.1").exists())
+
+    def test_state_save_error_still_prints_summary(self):
+        p = self.lib / "A.data"
+        make_snippet(p, "A", "untitled snippet", ["hello"])
+        old(p)
+        with mock.patch("sla.cli.State.save", side_effect=OSError("disk")):
+            summary = self.run_cli()
+        self.assertEqual(summary["written"], 1)
+        self.assertIn("state save:", (self.state_dir / "log").read_text("utf-8"))
 
 
 if __name__ == "__main__":

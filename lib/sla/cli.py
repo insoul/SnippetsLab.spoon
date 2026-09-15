@@ -1,5 +1,6 @@
 """snippetslab-autotitle 명령행. 바뀐 스니펫을 판정·생성·기록하고 JSON 요약을 출력한다."""
 import argparse
+import fcntl
 import json
 import os
 import sys
@@ -66,6 +67,8 @@ def show_status(st):
         print("  %s  %s" % (uuid, title))
     if st.force:
         print("force: %s" % ", ".join(st.force))
+    if st.pending:
+        print("pending: %s" % ", ".join(st.pending))
 
 
 def process(path, st, gen, log, backup_dir, dry_run, counts):
@@ -81,7 +84,7 @@ def process(path, st, gen, log, backup_dir, dry_run, counts):
         st.snippets.pop(s.uuid, None)
         st.locked[s.uuid] = s.title
         counts["locked"] += 1
-        log.write(s.uuid, "lock", s.title)
+        log.write(s.uuid, "lock" + ("(dry)" if dry_run else ""), s.title)
         if s.uuid in st.pending:
             st.pending.remove(s.uuid)
         return
@@ -89,6 +92,11 @@ def process(path, st, gen, log, backup_dir, dry_run, counts):
     counts["generated"] += 1
     log.write(s.uuid, action + ("(dry)" if dry_run else ""), title)
     if dry_run:
+        return
+    fresh = snippet.load(path)
+    if fresh.title != s.title or fresh.content_hash != s.content_hash:
+        counts["skipped"] += 1
+        log.write(s.uuid, "skip-changed")
         return
     snippet.write_title(path, title, backup_dir=backup_dir)
     st.snippets[s.uuid] = {"auto_title": title, "content_hash": s.content_hash}
@@ -119,33 +127,51 @@ def main(argv=None, generate=None):
         print("unlocked: %s" % args.unlock)
         return 0
 
-    config, config_error = load_config(args.config)
-    if config_error:
-        log.write("-", "error", "config: " + config_error)
-    gen = generate or (lambda text: titler.generate_title(text, config))
-    started = time.time()
-    counts = {"generated": 0, "written": 0, "locked": 0, "skipped": 0, "errors": 0}
+    state_dir.mkdir(parents=True, exist_ok=True)
+    lock_fd = os.open(str(state_dir / "lock"), os.O_CREAT | os.O_RDWR)
+    try:
+        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        os.close(lock_fd)
+        print(json.dumps({
+            "generated": 0, "written": 0, "locked": 0, "skipped": 0, "errors": 0, "busy": True,
+        }))
+        return 0
 
-    for path in sorted(Path(args.library).glob("*.data")):
-        mtime = path.stat().st_mtime
-        if not (args.all or mtime > st.last_run or path.stem in st.pending or path.stem in st.force):
-            continue
-        if started - mtime < RECENT_SECONDS:
-            continue
-        try:
-            process(path, st, gen, log, state_dir / "backup", args.dry_run, counts)
-        except Exception as e:            # 한 파일의 실패가 다른 파일을 막지 않는다
-            counts["errors"] += 1
-            log.write(path.stem, "error", "%s: %s" % (type(e).__name__, e))
-            if path.stem not in st.pending:
-                st.pending.append(path.stem)
+    try:
+        config, config_error = load_config(args.config)
+        if config_error:
+            log.write("-", "error", "config: " + config_error)
+        gen = generate or (lambda text: titler.generate_title(text, config))
+        started = time.time()
+        counts = {"generated": 0, "written": 0, "locked": 0, "skipped": 0, "errors": 0}
 
-    if not args.dry_run:
-        # 최근 RECENT_SECONDS 안에 바뀌어 건너뛴 파일이 다음 실행에 잡히도록 그만큼 앞당긴다
-        st.last_run = started - RECENT_SECONDS
-        st.save()
-    print(json.dumps(counts, ensure_ascii=False))
-    return 0
+        for path in sorted(Path(args.library).glob("*.data")):
+            mtime = path.stat().st_mtime
+            # snippet filenames are the snippet UUID
+            if not (args.all or mtime > st.last_run or path.stem in st.pending or path.stem in st.force):
+                continue
+            if started - mtime < RECENT_SECONDS:
+                continue
+            try:
+                process(path, st, gen, log, state_dir / "backup", args.dry_run, counts)
+            except Exception as e:            # 한 파일의 실패가 다른 파일을 막지 않는다
+                counts["errors"] += 1
+                log.write(path.stem, "error", "%s: %s" % (type(e).__name__, e))  # snippet filenames are the snippet UUID
+                if path.stem not in st.pending:
+                    st.pending.append(path.stem)
+
+        if not args.dry_run:
+            # 최근 RECENT_SECONDS 안에 바뀌어 건너뛴 파일이 다음 실행에 잡히도록 그만큼 앞당긴다
+            st.last_run = started - RECENT_SECONDS
+            try:
+                st.save()
+            except Exception as e:
+                log.write("-", "error", "state save: %s" % e)
+        print(json.dumps(counts, ensure_ascii=False))
+        return 0
+    finally:
+        os.close(lock_fd)
 
 
 if __name__ == "__main__":

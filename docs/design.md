@@ -94,7 +94,7 @@ Python 은 마지막 줄에 JSON 한 줄 `{"written": N, ...}` 을 출력한다.
 
 ### 6. 로그
 
-한 줄에 시각, UUID 앞 8자, 동작(generate / regenerate / lock / skip / relaunch / error), 제목. 로그 파일은 1MB 를 넘으면 `.1` 로 돌린다.
+한 줄에 시각, UUID 앞 8자, 동작(generate / regenerate / lock / skip / relaunch / error), 제목. 로그 파일은 1MB 를 넘으면 `.1` 로 돌린다. skip 은 소음을 피하려고 남기지 않는다. relaunch 는 Python 로그가 아니라 Hammerspoon 콘솔(hs.logger)에 남는다.
 
 ## 명령행
 

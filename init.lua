@@ -71,7 +71,11 @@ local function runTool(self)
         if not ok then self.logger.e(tostring(e)) end
         if rerun then rerun = false; safeRun(self) end
     end, { "--library", self.library })
-    if task then task:start() end
+    if task then
+        task:start()
+    else
+        self.logger.e("cannot spawn " .. tostring(self.tool))
+    end
 end
 
 safeRun = function(self) local ok, e = pcall(runTool, self); if not ok then self.logger.e(tostring(e)) end end

@@ -1,4 +1,8 @@
-# SnippetsLabAutoTitle.spoon
+# SnippetsLab.spoon
+
+SnippetsLab 을 위한 Hammerspoon 기능 모음. 기능 하나가 모듈 하나이고 `spoon.SnippetsLab.<기능>` 으로 드러난다.
+
+## autotitle
 
 SnippetsLab 에서 제목 없이 저장한 스니펫에 LM Studio 로 만든 제목을 넣는다.
 
@@ -11,14 +15,14 @@ SnippetsLab 에서 제목 없이 저장한 스니펫에 LM Studio 로 만든 제
 ## 설치
 
 ```sh
-git clone https://github.com/insoul/SnippetsLabAutoTitle.spoon ~/.hammerspoon/Spoons/SnippetsLabAutoTitle.spoon
-ln -sfn ~/.hammerspoon/Spoons/SnippetsLabAutoTitle.spoon/bin/snippetslab-autotitle ~/.local/bin/snippetslab-autotitle
+git clone https://github.com/insoul/SnippetsLab.spoon ~/.hammerspoon/Spoons/SnippetsLab.spoon
+ln -sfn ~/.hammerspoon/Spoons/SnippetsLab.spoon/bin/snippetslab-autotitle ~/.local/bin/snippetslab-autotitle
 ```
 
 `~/.hammerspoon/init.lua`:
 
 ```lua
-hs.loadSpoon("SnippetsLabAutoTitle"):start()
+hs.loadSpoon("SnippetsLab"):start()
 ```
 
 LM Studio 가 `localhost:1234` 에서 서버 모드로 떠 있어야 한다.
@@ -40,6 +44,8 @@ LM Studio 가 `localhost:1234` 에서 서버 모드로 떠 있어야 한다.
   "max_title_len": 40
 }
 ```
+
+즉시 적용해 보려면 Hammerspoon 콘솔에서 `spoon.SnippetsLab.autotitle:applyNow()`.
 
 ## 명령행
 

@@ -28,12 +28,12 @@ IMEHint.spoon 과 같은 구조다. Spoon 하나가 독립 git 리포이고, 감
 
 | 항목 | 경로 |
 |---|---|
-| Spoon | `~/.hammerspoon/Spoons/SnippetsLabAutoTitle.spoon/` (독립 git 리포) |
-| Lua | `…/SnippetsLabAutoTitle.spoon/init.lua` — 감시, 디바운스, 종료→적용→재실행 순서 |
-| Python | `…/SnippetsLabAutoTitle.spoon/bin/snippetslab-autotitle` — 판정, 생성(계획), 파일 쓰기(적용) (Python 3, 표준 라이브러리만) |
+| Spoon | `~/.hammerspoon/Spoons/SnippetsLab.spoon/` (독립 git 리포) |
+| Lua | `…/SnippetsLab.spoon/autotitle.lua` — 감시, 디바운스, 종료→적용→재실행 순서. `init.lua` 는 기능 모듈을 `spoon.SnippetsLab.<기능>` 으로 매다는 허브 |
+| Python | `…/SnippetsLab.spoon/bin/snippetslab-autotitle` — 판정, 생성(계획), 파일 쓰기(적용) (Python 3, 표준 라이브러리만) |
 | 실행 링크 | `~/.local/bin/snippetslab-autotitle` (수동 실행용) |
-| 로드 | `~/.hammerspoon/init.lua` 에서 `hs.loadSpoon("SnippetsLabAutoTitle"):start()` |
-| 설계 문서 | `…/SnippetsLabAutoTitle.spoon/docs/design.md` (이 문서) |
+| 로드 | `~/.hammerspoon/init.lua` 에서 `hs.loadSpoon("SnippetsLab"):start()` |
+| 설계 문서 | `…/SnippetsLab.spoon/docs/design.md` (이 문서) |
 | 상태 | `~/.local/state/snippetslab-autotitle/state.json` |
 | 로그 | `~/.local/state/snippetslab-autotitle/log` |
 | 설정 | `~/.config/snippetslab-autotitle/config.json` (없으면 기본값) |

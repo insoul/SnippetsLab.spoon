@@ -113,7 +113,7 @@ snippetslab-autotitle --unlock <UUID>  # 잠금을 풀어 다음 실행에서 �
 
 - 단위: plist 읽기/쓰기가 제목 외의 객체를 바꾸지 않는다 (바이트 단위 비교는 하지 않고 객체 비교). 판정 표의 다섯 행. 응답 다듬기.
 - 통합: 스파이크에서 쓴 스니펫 `134DB659…` 를 대상으로 `--dry-run`, 실제 쓰기, 재실행 후 `lab search --title-only` 로 확인.
-- Lua: Hammerspoon 콘솔에서 `spoon.SnippetsLabAutoTitle:runNow()` 로 Python 호출과 JSON 파싱을 확인. 재실행 조건은 창을 열어 둔 상태와 닫은 상태에서 각각 확인.
+- Lua: Hammerspoon 콘솔에서 `spoon.SnippetsLab.autotitle:runNow()` 로 Python 호출과 JSON 파싱을 확인. 재실행 조건은 창을 열어 둔 상태와 닫은 상태에서 각각 확인.
 - LM Studio 호출은 `--dry-run` 으로 프롬프트 품질을 먼저 본다.
 
 ## 하지 않는 것

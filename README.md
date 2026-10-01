@@ -12,6 +12,28 @@ SnippetsLab 에서 제목 없이 저장한 스니펫에 LM Studio 로 만든 제
 
 왜 이런 모양인지는 `docs/design.md` 에 있다.
 
+## capture
+
+**⌥C** — 앞 앱의 선택 텍스트(없으면 클립보드)를 새 스니펫으로 저장한다. 제목과 언어는 LM Studio 에
+한 번에 묻고, 저장은 SnippetsLab 2.7 의 `lab create` 로 한다. 앱은 열린 채 그대로고 라이브러리
+파일은 건드리지 않는다. 몇 초 뒤 `SnippetsLab 저장됨: <제목> (<언어>)` alert 가 뜬다.
+
+- 선택 텍스트는 접근성(AXSelectedText)으로 읽는다 — ⌘C 를 흉내 내지 않으므로 클립보드는 그대로다.
+  선택을 안 내주는 앱(일부 Electron 뷰, 터미널)에서는 클립보드로 넘어간다.
+- 제목이 처음부터 붙으므로 이 경로로 저장한 스니펫은 autotitle 의 "앱 닫고 파일 고치기"를 타지 않는다.
+- `lab` 은 새 스니펫만 만들 수 있고 기존 것은 못 고친다(매뉴얼). 그래서 autotitle 은 그대로 남는다.
+- SnippetsLab 설정 → Integrations → AI Agents & Command Line Tools 에서 **Write Access** 가 켜져 있어야 한다.
+- **Clipboard** 폴더에 넣는다 (`spoon.SnippetsLab.capture.folder`, `nil` 이면 루트). 폴더는 앱에서 미리 만들어
+  둬야 한다 — `lab` 은 폴더를 만들지 못하고, 없으면 루트에 저장하고 alert 에 그렇게 표시한다.
+- 언어는 LM 이 고른 별칭이 `lab` 에 거부되면 언어 없이 다시 저장한다.
+- **태그**도 같은 호출에서 뽑는다. 보수적으로 — 도구·서비스·주제를 명확히 가리키는 짧은 키워드만, 최대
+  3개(`max_tags`), 언어 이름·일반어(code, command…)는 제외, 애매하면 안 붙인다. 없는 태그는 `lab` 이 만든다.
+  **제외 목록**은 `~/.config/snippetslab-autotitle/tag-exclude.txt` 에 한 줄에 하나씩 적는다(`#` 주석,
+  대소문자 무시). `config.json` 의 `"tag_exclude": [...]` 도 같이 적용된다. `"max_tags": 0` 이면 태그를 뽑지 않는다.
+
+키를 바꾸려면 `start()` 전에 `spoon.SnippetsLab.capture.hotkey = {{"alt","shift"}, "s"}`.
+명령행에서도 쓸 수 있다: `pbpaste | bin/snippetslab-capture` → `{"uuid","title","language"}` 또는 `{"error"}`.
+
 ## 설치
 
 ```sh
@@ -63,5 +85,5 @@ snippetslab-autotitle --unlock <UUID>   # 잠금을 풀고 다음 실행에서 �
 ## 테스트
 
 ```sh
-PYTHONPATH=lib:tests /usr/bin/python3 -m unittest discover -s tests -v
+PYTHONPATH=lib:tests /usr/bin/python3 -m unittest discover -s tests -v   # 85 tests
 ```

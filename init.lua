@@ -4,6 +4,9 @@
 ---
 ---   autotitle  give untitled snippets a title from a local LLM (LM Studio).
 ---              See autotitle.lua and docs/design.md.
+---   capture    ⌥C saves the selected text or clipboard as a new snippet,
+---              titled by the same LLM, through SnippetsLab 2.7's `lab create`.
+---              See capture.lua.
 ---
 --- Each feature is a plain Lua module next to this file, exposed as
 --- `spoon.SnippetsLab.<feature>`. start()/stop() here fan out to every feature;
@@ -25,7 +28,7 @@ local function scriptPath()
 end
 obj.spoonPath = scriptPath()
 
-obj.features = { "autotitle" }
+obj.features = { "autotitle", "capture" }
 
 --- SnippetsLab:init()
 --- Method

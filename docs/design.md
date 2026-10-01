@@ -122,3 +122,28 @@ snippetslab-autotitle --unlock <UUID>  # 잠금을 풀어 다음 실행에서 �
 - 앱 실행 중 파일 쓰기. 앱의 다음 저장 때 되돌아가므로 하지 않는다.
 - 태그·폴더·본문 변경.
 - setapp 라이브러리(`iCloud~com~renfei~SnippetsLab-setapp`) 지원. 현재 비어 있다.
+
+## capture (2026-09-30)
+
+SnippetsLab 2.7 이 `lab` CLI 와 MCP 서버를 내놓았다. 할 수 있는 것은 search·fetch·list·create 뿐이고
+**기존 스니펫의 편집·이동·삭제는 불가**(매뉴얼 5.4). 그래서 autotitle 의 파일 쓰기 경로는 대체할 수 없고,
+대신 "만들 때 제목을 붙이는" 입구를 하나 두어 그 경로를 덜 타게 한다.
+
+- `capture.lua`: ⌥C → `hs.uielement.focusedElement():selectedText()` → 없으면 클립보드 → `bin/snippetslab-capture`
+  에 stdin 으로 넘긴다. `hs.task:setInput` 은 **start() 전에** 불러야 한다 — 뒤에 부르면 버려진다(문서·`/bin/cat` 실측).
+- `lib/sla/capture.py`: `describe()` 가 LM 에 `{"title","language"}` JSON 을 한 번에 묻는다. think 블록을
+  걷어내고 첫 JSON 객체를 잡되, JSON 이 아니면 전체를 제목으로 본다(`titler.clean_title`). 언어는
+  `LANGUAGES` 표(렉서 별칭)에 있는 것만 넘기고, `lab` 이 그래도 거부하면 언어 없이 한 번 더 시도한다.
+  `create()` 는 `lab create --launch --title T [--language L]` 의 마지막 JSON 줄에서 uuid 를 읽는다.
+- LM Studio 설정은 autotitle 과 같은 `~/.config/snippetslab-autotitle/config.json` 을 쓴다.
+- 저장 폴더는 `capture.folder`(기본 "Clipboard") 를 `--folder` 로 넘긴다. `lab` 은 폴더를 만들지 못하고 없는
+  폴더는 오류를 내므로, 오류 문구에 "folder" 가 있으면 폴더 없이 다시 저장한다. 언어 거부와 같은 방식이고
+  최대 두 번 물러난다(언어 → 폴더). 결과 JSON 의 `folder: null` 이 그 표시이고 alert 에도 적는다.
+- 태그: 같은 LM 호출에서 `tags` 배열을 받는다. 프롬프트가 "최대 3개, 도구·서비스·주제만, 애매하면 빈 목록,
+  언어·일반어 금지"라 요구하고, `filter_tags` 가 다시 거른다 — 공백·대소문자 정규화, 중복 제거, 제외 목록
+  (`tag_exclude` + `tag_exclude_file`, 대소문자 무시), 언어 이름과 `<언어>lexer`, 그리고 `max_tags` 상한.
+  LM 이 태그를 남발해도 상한과 제외 목록이 막는다는 것이 설계 의도다. 제외 목록을 파일로 둔 이유는
+  config.json 을 열지 않고도 태그 하나를 금지할 수 있게 하려는 것이다.
+- 실측: 클립보드 `lsof -iTCP -sTCP:LISTEN -n -P` → 제목 "List TCP listeners", 언어 bash, 약 3초.
+  `git log --oneline --graph --decorate -20` → "Git log 20 commits", bash, Clipboard 폴더.
+

@@ -1,0 +1,11 @@
+#!/usr/bin/env python3
+"""snippetslab-capture 진입점. 표준 입력의 텍스트를 제목·언어를 붙여 SnippetsLab 에 저장한다."""
+import os
+import sys
+
+HERE = os.path.dirname(os.path.realpath(__file__))
+sys.path.insert(0, os.path.join(HERE, "..", "lib"))
+
+from sla.capture import main  # noqa: E402
+
+sys.exit(main())
